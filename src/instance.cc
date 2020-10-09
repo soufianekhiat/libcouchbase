@@ -727,7 +727,7 @@ lcb_st::find_server(const lcb_host_t& host) const
     unsigned ii;
     for (ii = 0; ii < cmdq.npipelines; ii++) {
         lcb::Server *server = static_cast<lcb::Server*>(cmdq.pipelines[ii]);
-        if (server && lcb_host_equals(&server->get_host(), &host)) {
+        if (server && server->has_valid_host() && lcb_host_equals(&server->get_host(), &host)) {
             return server;
         }
     }
@@ -884,6 +884,50 @@ LCB_INTERNAL_API uint32_t lcb_durability_timeout(lcb_INSTANCE *instance, uint32_
         tmo_us = instance->settings->persistence_timeout_floor;
     }
     return tmo_us / 1000 * 0.9;
+}
+
+static bool is_valid_collection_char(char ch)
+{
+    if (ch >= 'A' && ch <= 'Z') {
+        return true;
+    }
+    if (ch >= 'a' && ch <= 'z') {
+        return true;
+    }
+    if (ch >= '0' && ch <= '9') {
+        return true;
+    }
+    switch (ch) {
+        case '_':
+        case '-':
+        case '%':
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool is_valid_collection_element(const char *element, size_t element_len)
+{
+    if (element_len == 0 && element == NULL) {
+        /* NULL/0 for collection is mapped to default collection */
+        return true;
+    }
+    if (element_len < 1 || element_len > 30 || element == NULL) {
+        return false;
+    }
+    for (size_t i = 0; i < element_len; ++i) {
+        if (!is_valid_collection_char(element[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+LCB_INTERNAL_API int lcb_is_collection_valid(const char *scope, size_t scope_len, const char *collection,
+                                             size_t collection_len)
+{
+    return is_valid_collection_element(scope, scope_len) && is_valid_collection_element(collection, collection_len);
 }
 
 LIBCOUCHBASE_API

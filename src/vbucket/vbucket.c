@@ -654,6 +654,8 @@ int lcbvb_load_json_ex(lcbvb_CONFIG *cfg, const char *data, const char *source, 
                         cfg->caps |= LCBVB_CAP_COLLECTIONS;
                     } else if (strcmp(jcap->valuestring, "durableWrite") == 0) {
                         cfg->caps |= LCBVB_CAP_DURABLE_WRITE;
+                    } else if (strcmp(jcap->valuestring, "tombstonedUserXAttrs") == 0) {
+                        cfg->caps |= LCBVB_CAP_TOMBSTONED_USER_XATTRS;
                     }
                 }
             }
@@ -987,6 +989,9 @@ char *lcbvb_save_json(lcbvb_CONFIG *cfg)
         if (cfg->caps & LCBVB_CAP_DURABLE_WRITE) {
             cJSON_AddItemToArray(jcaps, cJSON_CreateString("durableWrite"));
         }
+        if (cfg->caps & LCBVB_CAP_TOMBSTONED_USER_XATTRS) {
+            cJSON_AddItemToArray(jcaps, cJSON_CreateString("tombstonedUserXAttrs"));
+        }
         cJSON_AddItemToObject(root, "bucketCapabilities", jcaps);
     }
     if (cfg->ccaps != 0) {
@@ -1207,8 +1212,8 @@ static void compute_vb_list_diff(lcbvb_CONFIG *from, lcbvb_CONFIG *to, char **ou
         if (!found) {
             char *infostr = malloc(strlen(newsrv->authority) + 128);
             lcb_assert(infostr);
-            sprintf(infostr, "%s(Data=%d, Index=%d, Query=%d)", newsrv->authority, newsrv->svc.data, newsrv->svc.n1ql,
-                    newsrv->svc.ixquery);
+            sprintf(infostr, "%s(Data=%d, Index=%d, Query=%d)", newsrv->authority, newsrv->svc.data,
+                    newsrv->svc.ixquery, newsrv->svc.n1ql);
             out[offset] = infostr;
             ++offset;
         }
@@ -1239,11 +1244,23 @@ lcbvb_CONFIGDIFF *lcbvb_compare(lcbvb_CONFIG *from, lcbvb_CONFIG *to)
         ret->sequence_changed = 1;
     }
 
+    if (to->nrepl != from->nrepl) {
+        ret->n_repl_changed = 1;
+    }
+
     if (from->nvb == to->nvb) {
         for (ii = 0; ii < from->nvb; ii++) {
             lcbvb_VBUCKET *vba = from->vbuckets + ii, *vbb = to->vbuckets + ii;
             if (vba->servers[0] != vbb->servers[0]) {
                 ret->n_vb_changes++;
+            }
+            if (!ret->n_repl_changed) {
+                unsigned jj;
+                for (jj = 1; jj < from->nrepl + 1 /* skip master */; jj++) {
+                    if (vba->servers[jj] != vbb->servers[jj]) {
+                        ret->n_vb_changes++;
+                    }
+                }
             }
         }
     } else {
@@ -1277,6 +1294,9 @@ lcbvb_CHANGETYPE lcbvb_get_changetype(lcbvb_CONFIGDIFF *diff)
     }
     if (*diff->servers_added || *diff->servers_removed || diff->sequence_changed) {
         ret |= LCBVB_SERVERS_MODIFIED;
+    }
+    if (diff->n_repl_changed) {
+        ret |= LCBVB_REPLICAS_MODIFIED;
     }
     return ret;
 }
@@ -1413,7 +1433,7 @@ int lcbvb_get_randhost_ex(const lcbvb_CONFIG *cfg, lcbvb_SVCTYPE type, lcbvb_SVC
         has_svc = (type == LCBVB_SVCTYPE_DATA && svcs->data) || (type == LCBVB_SVCTYPE_IXADMIN && svcs->ixadmin) ||
                   (type == LCBVB_SVCTYPE_IXQUERY && svcs->ixquery) || (type == LCBVB_SVCTYPE_MGMT && svcs->mgmt) ||
                   (type == LCBVB_SVCTYPE_QUERY && svcs->n1ql) || (type == LCBVB_SVCTYPE_SEARCH && svcs->fts) ||
-                  (type == LCBVB_SVCTYPE_VIEWS && svcs->views) || (type == LCBVB_SVCTYPE_CBAS && svcs->cbas);
+                  (type == LCBVB_SVCTYPE_VIEWS && svcs->views) || (type == LCBVB_SVCTYPE_ANALYTICS && svcs->cbas);
 
         if (has_svc) {
             cfg->randbuf[oix++] = (int)nn;

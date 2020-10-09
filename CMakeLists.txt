@@ -50,10 +50,13 @@ OPTION(LCB_EMBED_PLUGIN_LIBEVENT "Embed the libevent plugin" OFF)
 OPTION(LCB_STATIC_LIBEVENT "Link static libevent (only applicable if EMBED_PLUGIN_LIBEVENT is ON" OFF)
 OPTION(LCB_USE_HDR_HISTOGRAM "Use HdrHistogram for statistics recording" OFF)
 OPTION(LCB_INSTALL_HEADERS "Install header files" ON)
+OPTION(LCB_INSTALL_LIBRARY "Install library files" ON)
 OPTION(LCB_INSTALL_PKGCONFIG "Install pkgconfig/libcouchbase.pc" ON)
 OPTION(LCB_DUMP_PACKETS "Enable dumping network packets on TRACE log level" OFF)
 OPTION(LCB_USE_PROFILER "Build with profiler support (from gperftools)" OFF)
 OPTION(LCB_SKIP_GIT_VERSION "Skip version detection using git" OFF)
+# Read more at https://wiki.wireshark.org/TLS
+option(LCB_TLS_LOG_KEYS "Write per-session secrets to log file specified by env TLS_KEY_LOG_FILE. (Useful for Wireshark SSL/TLS dissection)" OFF)
 
 STRING(TIMESTAMP LCB_BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S" UTC)
 
@@ -93,9 +96,6 @@ IF (LCB_BUILD_LIBUV)
 ENDIF()
 INCLUDE(cmake/Modules/GetPlatformCCInfo.cmake)
 INCLUDE(cmake/Modules/GetVersionInfo.cmake)
-IF (MSVC)
-    INCLUDE(cmake/Modules/CopyPDB.cmake)
-ENDIF ()
 INCLUDE(cmake/Modules/DownloadLcbDep.cmake)
 INCLUDE(CheckIncludeFiles)
 INCLUDE(cmake/source_files.cmake)
@@ -352,8 +352,10 @@ ELSE()
             COMMAND rm -f libcouchbase.dylib
             COMMAND ln libcouchbase.2.dylib libcouchbase.dylib
             WORKING_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
-        INSTALL(FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libcouchbase.dylib
-            DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        IF(LCB_INSTALL_LIBRARY)
+            INSTALL(FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libcouchbase.dylib
+                DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        ENDIF()
     ENDIF()
 ENDIF()
 
@@ -411,10 +413,11 @@ ENDIF()
 
 ADD_SUBDIRECTORY(plugins/io/select)
 ADD_SUBDIRECTORY(plugins/io/iocp)
-INSTALL(TARGETS couchbase
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+IF(LCB_INSTALL_LIBRARY)
+    INSTALL(TARGETS couchbase RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+ENDIF()
 
 IF(LCB_INSTALL_HEADERS)
     INSTALL(DIRECTORY include/libcouchbase ${LCB_GENSRCDIR}/libcouchbase
@@ -422,11 +425,18 @@ IF(LCB_INSTALL_HEADERS)
             FILES_MATCHING PATTERN *.h PATTERN *.c)
 ENDIF()
 
-INSTALL(DIRECTORY doc/man/ DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 FILES_MATCHING PATTERN *.1)
-INSTALL(DIRECTORY doc/man/ DESTINATION ${CMAKE_INSTALL_MANDIR}/man4  FILES_MATCHING PATTERN *.4)
+IF(NOT LCB_NO_TOOLS)
+    INSTALL(DIRECTORY doc/man/ DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 FILES_MATCHING PATTERN *.1)
+    INSTALL(DIRECTORY doc/man/ DESTINATION ${CMAKE_INSTALL_MANDIR}/man4  FILES_MATCHING PATTERN *.4)
+ENDIF()
 
-IF(MSVC)
-    INSTALL_PDBS(couchbase)
+IF(LCB_INSTALL_LIBRARY)
+    IF(MSVC)
+        IF(NOT LCB_BUILD_STATIC)
+            INSTALL(FILES $<TARGET_PDB_FILE:couchbase> DESTINATION ${CMAKE_INSTALL_BINDIR} OPTIONAL)
+        ENDIF()
+        INSTALL(DIRECTORY $<TARGET_LINKER_FILE_DIR:couchbase>/ DESTINATION ${CMAKE_INSTALL_LIBDIR} OPTIONAL FILES_MATCHING PATTERN "*.exp")
+    ENDIF()
 ENDIF()
 
 SET(_lcb_tarname "libcouchbase-${LCB_VERSION}")

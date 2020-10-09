@@ -48,6 +48,12 @@ LIBCOUCHBASE_API lcb_STATUS lcb_respsubdoc_status(const lcb_RESPSUBDOC *resp)
     return resp->ctx.rc;
 }
 
+LIBCOUCHBASE_API int lcb_respsubdoc_is_deleted(const lcb_RESPSUBDOC *resp)
+{
+    return resp->ctx.status_code == PROTOCOL_BINARY_RESPONSE_SUBDOC_MULTI_PATH_FAILURE_DELETED ||
+           resp->ctx.status_code == PROTOCOL_BINARY_RESPONSE_SUBDOC_SUCCESS_DELETED;
+}
+
 LIBCOUCHBASE_API lcb_STATUS lcb_respsubdoc_error_context(const lcb_RESPSUBDOC *resp,
                                                          const lcb_KEY_VALUE_ERROR_CONTEXT **ctx)
 {
@@ -393,6 +399,16 @@ LIBCOUCHBASE_API lcb_STATUS lcb_cmdsubdoc_access_deleted(lcb_CMDSUBDOC *cmd, int
     return LCB_SUCCESS;
 }
 
+LIBCOUCHBASE_API lcb_STATUS lcb_cmdsubdoc_create_as_deleted(lcb_CMDSUBDOC *cmd, int flag)
+{
+    if (flag) {
+        cmd->cmdflags |= LCB_CMDSUBDOC_F_CREATE_AS_DELETED;
+    } else {
+        cmd->cmdflags &= ~LCB_CMDSUBDOC_F_CREATE_AS_DELETED;
+    }
+    return LCB_SUCCESS;
+}
+
 namespace SubdocCmdTraits
 {
 enum Options {
@@ -528,6 +544,7 @@ namespace SubdocDocFlags
 static const uint8_t MKDOC = 0x01;
 static const uint8_t ADDDOC = 0x02;
 static const uint8_t ACCESS_DELETED = 0x04;
+static const uint8_t CREATE_AS_DELETED = 0x08;
 } // namespace SubdocDocFlags
 
 static size_t get_valbuf_size(const lcb_VALBUF &vb)
@@ -573,6 +590,9 @@ static uint8_t make_doc_flags(const uint32_t user)
     }
     if (user & LCB_CMDSUBDOC_F_ACCESS_DELETED) {
         flags |= SubdocDocFlags::ACCESS_DELETED;
+    }
+    if (user & LCB_CMDSUBDOC_F_CREATE_AS_DELETED) {
+        flags |= SubdocDocFlags::CREATE_AS_DELETED;
     }
     return flags;
 }
@@ -732,6 +752,9 @@ lcb_STATUS MultiBuilder::add_spec(const lcb_SDSPEC *spec)
 
 static lcb_STATUS subdoc_validate(lcb_INSTANCE *, const lcb_CMDSUBDOC *cmd)
 {
+    if (!lcb_is_collection_valid(cmd->scope, cmd->nscope, cmd->collection, cmd->ncollection)) {
+        return LCB_ERR_INVALID_ARGUMENT;
+    }
     // First validate the command
     if (cmd->nspecs == 0) {
         return LCB_ERR_NO_COMMANDS;
@@ -767,6 +790,12 @@ lcb_STATUS lcb_subdoc(lcb_INSTANCE *instance, void *cookie, const lcb_CMDSUBDOC 
 
         uint32_t expiry = cmd->exptime;
         uint8_t docflags = make_doc_flags(cmd->cmdflags);
+
+        if ((docflags & SubdocDocFlags::CREATE_AS_DELETED) != 0 &&
+            (LCBVB_CAPS(LCBT_VBCONFIG(instance)) & LCBVB_CAP_TOMBSTONED_USER_XATTRS) == 0) {
+            return LCB_ERR_SDK_FEATURE_UNAVAILABLE;
+        }
+
         lcb_STATUS rc = LCB_SUCCESS;
 
         if (cmd->error_index) {
@@ -802,7 +831,7 @@ lcb_STATUS lcb_subdoc(lcb_INSTANCE *instance, void *cookie, const lcb_CMDSUBDOC 
         lcb_U8 ffextlen = 0;
 
         hdr.request.magic = PROTOCOL_BINARY_REQ;
-        if (cmd->dur_level) {
+        if (ctx.is_mutate() && cmd->dur_level) {
             if (new_durability_supported) {
                 hdr.request.magic = PROTOCOL_BINARY_AREQ;
                 ffextlen = 4;
@@ -844,12 +873,12 @@ lcb_STATUS lcb_subdoc(lcb_INSTANCE *instance, void *cookie, const lcb_CMDSUBDOC 
         hdr.request.extlen = extlen;
         hdr.request.opaque = pkt->opaque;
         hdr.request.cas = lcb_htonll(cmd->cas);
-        hdr.request.bodylen = htonl(hdr.request.extlen + ffextlen + ntohs(hdr.request.keylen) + ctx.payload_size);
+        hdr.request.bodylen = htonl(hdr.request.extlen + ffextlen + mcreq_get_key_size(&hdr) + ctx.payload_size);
         memcpy(SPAN_BUFFER(&pkt->kh_span), hdr.bytes, sizeof(hdr.bytes));
-        if (cmd->dur_level && new_durability_supported) {
+        if (ctx.is_mutate() && cmd->dur_level && new_durability_supported) {
             uint8_t meta = (1u << 4u) | 3u;
             uint8_t level = cmd->dur_level;
-            uint16_t timeout = 0;
+            uint16_t timeout = htons(lcb_durability_timeout(instance, cmd->timeout));
             memcpy(SPAN_BUFFER(&pkt->kh_span) + MCREQ_PKT_BASESIZE, &meta, sizeof(meta));
             memcpy(SPAN_BUFFER(&pkt->kh_span) + MCREQ_PKT_BASESIZE + 1, &level, sizeof(level));
             memcpy(SPAN_BUFFER(&pkt->kh_span) + MCREQ_PKT_BASESIZE + 2, &timeout, sizeof(timeout));

@@ -138,7 +138,6 @@ int Confmon::do_set_next(ConfigInfo *new_config, bool notify_miss)
         return 0;
     }
     if (config) {
-        lcbvb_CHANGETYPE chstatus = LCBVB_NO_CHANGES;
         lcbvb_CONFIGDIFF *diff = lcbvb_compare(config->vbc, new_config->vbc);
 
         if (!diff) {
@@ -146,18 +145,19 @@ int Confmon::do_set_next(ConfigInfo *new_config, bool notify_miss)
             return 0;
         }
 
-        chstatus = lcbvb_get_changetype(diff);
+        lcbvb_CHANGETYPE chstatus = lcbvb_get_changetype(diff);
         lcbvb_free_diff(diff);
 
-        if (chstatus == 0 || config->compare(*new_config) >= 0) {
+        if (chstatus == LCBVB_NO_CHANGES || config->compare(*new_config) >= 0) {
             const lcbvb_CONFIG *ca, *cb;
 
             ca = config->vbc;
             cb = new_config->vbc;
 
             lcb_log(LOGARGS(this, TRACE),
-                    "Not applying configuration received via %s. No changes detected. A.rev=%d, B.rev=%d",
-                    provider_string(new_config->get_origin()), ca->revid, cb->revid);
+                    "Not applying configuration received via %s (bucket=%.*s). No changes detected. A.rev=%d, B.rev=%d",
+                    provider_string(new_config->get_origin()), (int)new_config->vbc->bname_len, new_config->vbc->bname,
+                    ca->revid, cb->revid);
             if (notify_miss) {
                 invoke_listeners(CLCONFIG_EVENT_GOT_ANY_CONFIG, new_config);
             }
@@ -214,7 +214,7 @@ void Confmon::provider_failed(Provider *provider, lcb_STATUS reason)
             last_error = reason;
         }
         if (reason == LCB_ERR_AUTHENTICATION_FAILURE) {
-            goto GT_ERROR;
+            lcb_log(LOGARGS(this, WARN), "Received authentication error during bootstrap");
         }
     }
 
@@ -244,7 +244,6 @@ void Confmon::provider_failed(Provider *provider, lcb_STATUS reason)
         LOG(this, TRACE, "Maximum provider reached. Resetting index");
     }
 
-GT_ERROR:
     invoke_listeners(CLCONFIG_EVENT_PROVIDERS_CYCLED, NULL);
     cur_provider = first_active();
     stop();
@@ -296,7 +295,7 @@ void Confmon::start(bool refresh)
         return;
     }
 
-    LOG(this, TRACE, "Refreshing current cluster map");
+    lcb_log(LOGARGS(this, TRACE), "Refreshing current cluster map (bucket: %s)", settings->bucket);
     lcb_assert(cur_provider);
     state = CONFMON_S_ACTIVE | CONFMON_S_ITERGRACE;
 

@@ -570,28 +570,44 @@ TEST_F(MockUnitTest, testSaslMechs)
     // Force our SASL mech
     err = lcb_cntl(instance, LCB_CNTL_SET, LCB_CNTL_FORCE_SASL_MECH, (void *)"blah");
     ASSERT_EQ(LCB_SUCCESS, err);
-
     Item itm("key", "value");
     KVOperation kvo(&itm);
-
     kvo.allowableErrors.insert(LCB_ERR_SASLMECH_UNAVAILABLE);
     kvo.allowableErrors.insert(LCB_ERR_TIMEOUT);
     kvo.store(instance);
+    ASSERT_FALSE(kvo.globalErrors.find(LCB_ERR_SASLMECH_UNAVAILABLE) == kvo.globalErrors.end());
 
+    err = lcb_cntl(instance, LCB_CNTL_SET, LCB_CNTL_FORCE_SASL_MECH, (void *)"    ");
+    ASSERT_EQ(LCB_SUCCESS, err);
+    kvo.clear();
+    kvo.allowableErrors.insert(LCB_ERR_SASLMECH_UNAVAILABLE);
+    kvo.allowableErrors.insert(LCB_ERR_TIMEOUT);
+    kvo.store(instance);
     ASSERT_FALSE(kvo.globalErrors.find(LCB_ERR_SASLMECH_UNAVAILABLE) == kvo.globalErrors.end());
 
     err = lcb_cntl(instance, LCB_CNTL_SET, LCB_CNTL_FORCE_SASL_MECH, (void *)"PLAIN");
     ASSERT_EQ(LCB_SUCCESS, err);
-
     kvo.clear();
-#ifndef LCB_NO_SSL
-    kvo.allowableErrors.insert(LCB_ERR_TIMEOUT);
-#endif
     kvo.store(instance);
-#ifndef LCB_NO_SSL
-    // should not be connected over non-SSL connection with PLAIN SASL auth
-    ASSERT_FALSE(kvo.globalErrors.find(LCB_ERR_TIMEOUT) == kvo.globalErrors.end());
-#endif
+    ASSERT_TRUE(kvo.globalErrors.find(LCB_ERR_TIMEOUT) == kvo.globalErrors.end());
+
+    err = lcb_cntl(instance, LCB_CNTL_SET, LCB_CNTL_FORCE_SASL_MECH, (void *)"blah PLAIN");
+    ASSERT_EQ(LCB_SUCCESS, err);
+    kvo.clear();
+    kvo.store(instance);
+    ASSERT_TRUE(kvo.globalErrors.find(LCB_ERR_TIMEOUT) == kvo.globalErrors.end());
+
+    err = lcb_cntl(instance, LCB_CNTL_SET, LCB_CNTL_FORCE_SASL_MECH, (void *)"  PLAIN    ");
+    ASSERT_EQ(LCB_SUCCESS, err);
+    kvo.clear();
+    kvo.store(instance);
+    ASSERT_TRUE(kvo.globalErrors.find(LCB_ERR_TIMEOUT) == kvo.globalErrors.end());
+
+    err = lcb_cntl(instance, LCB_CNTL_SET, LCB_CNTL_FORCE_SASL_MECH, (void *)"blah,PLAIN");
+    ASSERT_EQ(LCB_SUCCESS, err);
+    kvo.clear();
+    kvo.store(instance);
+    ASSERT_TRUE(kvo.globalErrors.find(LCB_ERR_TIMEOUT) == kvo.globalErrors.end());
 
     lcb_destroy(instance);
 }
@@ -815,7 +831,8 @@ TEST_F(MockUnitTest, testNegativeIndex)
     lcb_cmdstore_key(scmd, key.c_str(), key.size());
     std::string value("{}");
     lcb_cmdstore_value(scmd, value.c_str(), value.size());
-    ni = {LCB_SUCCESS, 0};
+    ni.err = LCB_SUCCESS;
+    ni.callCount = 0;
     err = lcb_store(instance, &ni, scmd);
     ASSERT_EQ(LCB_SUCCESS, err);
     lcb_wait(instance, LCB_WAIT_DEFAULT);
@@ -826,7 +843,8 @@ TEST_F(MockUnitTest, testNegativeIndex)
     lcb_CMDGET *gcmd;
     lcb_cmdget_create(&gcmd);
     lcb_cmdget_key(gcmd, key.c_str(), key.size());
-    ni = {LCB_SUCCESS, 0};
+    ni.err = LCB_SUCCESS;
+    ni.callCount = 0;
     // Set the index to -1
     vbc->vbuckets[vb].servers[0] = -1;
     err = lcb_get(instance, &ni, gcmd);

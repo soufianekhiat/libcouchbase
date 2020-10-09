@@ -28,6 +28,7 @@ void lcb_default_settings(lcb_settings *settings)
     settings->config_node_timeout = LCB_DEFAULT_NODECONFIG_TIMEOUT;
     settings->views_timeout = LCB_DEFAULT_VIEW_TIMEOUT;
     settings->n1ql_timeout = LCB_DEFAULT_N1QL_TIMEOUT;
+    settings->analytics_timeout = LCB_DEFAULT_ANALYTICS_TIMEOUT;
     settings->durability_timeout = LCB_DEFAULT_DURABILITY_TIMEOUT;
     settings->durability_interval = LCB_DEFAULT_DURABILITY_INTERVAL;
     settings->persistence_timeout_floor = LCB_DEFAULT_PERSISTENCE_TIMEOUT_FLOOR;
@@ -60,9 +61,7 @@ void lcb_default_settings(lcb_settings *settings)
     settings->vb_noremap = LCB_DEFAULT_VB_NOREMAP;
     settings->select_bucket = LCB_DEFAULT_SELECT_BUCKET;
     settings->tcp_keepalive = LCB_DEFAULT_TCP_KEEPALIVE;
-    settings->send_hello = 1;
     settings->config_poll_interval = LCB_DEFAULT_CONFIG_POLL_INTERVAL;
-    settings->use_errmap = 1;
     settings->use_collections = 1;
     settings->log_redaction = 0;
     settings->use_tracing = 1;
@@ -80,6 +79,7 @@ void lcb_default_settings(lcb_settings *settings)
     settings->wait_for_config = 0;
     settings->enable_durable_write = 0;
     settings->retry_strategy = lcb_retry_strategy_best_effort;
+    settings->enable_unordered_execution = 1;
 }
 
 LCB_INTERNAL_API

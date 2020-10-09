@@ -28,9 +28,12 @@ static void ext_callback_proxy(mc_PIPELINE *pl, mc_PACKET *req, lcb_STATUS rc, c
     switch (res->opcode()) {
         case PROTOCOL_BINARY_CMD_SELECT_BUCKET:
             lcb::clconfig::select_status(rd->cookie, rc);
-            server->selected_bucket = 1;
+            if (rc == LCB_SUCCESS) {
+                server->selected_bucket = 1;
+            }
             break;
         case PROTOCOL_BINARY_CMD_GET_CLUSTER_CONFIG:
+            lcb_assert(server->has_valid_host());
             lcb::clconfig::cccp_update(rd->cookie, rc, res->value(), res->vallen(), &server->get_host());
             break;
     }
@@ -87,7 +90,7 @@ lcb_STATUS lcb_st::select_bucket(const void *cookie_, lcb::Server *server)
     lcb_STATUS err;
     mc_PACKET *packet;
     mc_REQDATAEX *rd;
-
+    lcb_assert(settings->bucket);
     packet = mcreq_allocate_packet(server);
     if (!packet) {
         return LCB_ERR_NO_MEMORY;

@@ -1,5 +1,66 @@
 # Release Notes
 
+## 3.0.5 (2020-09-21)
+
+* CCBC-1307: allow to select any mechanisms for SASL regardless network protocol being used.
+  But by default, try to avoid downgrading to PLAIN on non-TLS connections. Also the change allows to specify list of
+  preferred mechanisms instead of only one (use comma in the value of `sasl_mech_force` connection string option).
+* CCBC-1276: allow to hint flex index usage in query options
+* CCBC-1312: fix return values for `lcb_cmdquery_scope_*`
+* CCBC-1313: replace `std::random_shuffle` with `std::shuffle` (fixes build of `cbc-n1qlback` tool)
+
+## 3.0.4 (2020-08-26)
+
+* CCBC-1281: Implement scope qualifier for queries
+* CCBC-1301: expose cmake option to help dissecting TLS traffic
+* Detect configuration change when replica indexes changed.
+
+## 3.0.3 (2020-07-27)
+
+* CCBC-1265: enable out of order execution by default
+* CCBC-1189: Validate collection and scope names early. The library will return error if the collection name is not valid without sending command to the server.
+* CCBC-1278: Fix stripping payload over TLS connection. The library might propagate zero return code from recv() even when previous calls of recv() successfully transferred bytes to SSL context.  In this case we might lose these trailing bytes and just close the socket.
+* CCBC-1264: Fix calculating key size when durability level specified
+* CCBC-1258: fix port order in vbucket diff info message
+* CCBC-1274: Fix pointer casting in HTTP callback of cbc tool.
+* CCBC-1167: Fix tests build on MacOS
+* CCBC-1248: Always request error map feature and send HELLO message to speedup bootstrap
+* Implement tick for IOCP plugin on Windows
+* Improved build on Windows (fixed static build, and PDB installation)
+* Fix collections issues for future server release
+
+## 3.0.2 (2020-06-10)
+
+* CCBC-1200: Retry bootstrap on missing bucket until timeout. Bootstrap timeout controlled by "`config_total_timeout`" in connection string or `LCB_CNTL_CONFIGURATION_TIMEOUT`
+* CCBC-1190: Fix automatic retries for temporary failures from the server.
+* CCBC-1158: Fix retrying on unknown collection.
+* CCBC-1254: Use separate option for default timeout of analytics queries (connection string `"analytics_timeout"`).
+* CCBC-1178: Do not allow to set CAS for upsert and insert operations
+* CCBC-1156: Fix enum value for analytics type of HTTP request
+* CCBC-1251: No longer log error when using GCCCP on pre-6.5
+* CCBC-1234: Fixed SRV resolution to work with large record sizes.
+* CCBC-1222: Tracing thresholds for query and search in connection strings. Now they are correctly spelled as `tracing_threshold_search` and `tracing_threshold_query`.
+* CCBC-1187: Ensure `lcb_respexists_is_found` does not true for deleted documents.
+* CCBC-1233: Updated RTO to independently specify `operation_name`.
+* CCBC-1205: Do not include trailing zero for endpoint length for KV context
+* CCBC-1215: Fixed segfault in exists calls.
+* CCBC-1218: Fixed intermittent segfault in client durable store
+* Documentation issues addressed (CCBC-1240, CCBC-1243, CCBC-1241, CCBC-1245)
+
+## 3.0.1 (2020-04-07)
+
+* CCBC-1188: cbc-pillowfight: fixed `--collection` switch.
+* CCBC-1173: Fix exporting `lcb_cmdquery_consistency_token_for_keyspace`
+* CCBC-1168: expose `max_parallelism` for query
+* CCBC-1171: expose `profile` option for query
+* CCBC-1170: expose `scan_wait` option for query
+* CCBC-1159: Fix error codes for Management API
+* MB-37768: Don't override `CMAKE_INSTALL_RPATH`.
+* CCBC-1208: Add a fail-fast retry strategy.
+* CCBC-1209: Rename functions of embedded `http_parser` to avoid name clash.
+* Remove use of deprecated function `std::random_shuffle`. `std::random_shuffle` is deprecated in C++14, removed in C++17. Replace with `std::shuffle`.
+* Fixed several issues reported by coverity
+
 ## 3.0.0 (2020-01-17)
 
 * CCBC-1152: Enable `SCRAM-SHA*` SASL by default.
